@@ -1,4 +1,10 @@
 #include <common.h>
+#ifdef ESP_PLATFORM
+#include "esp_attr.h"
+#define PSYZ_ESP_XRAM EXT_RAM_BSS_ATTR
+#else
+#define PSYZ_ESP_XRAM
+#endif
 #include <libcd.h>
 
 typedef union {
@@ -28,11 +34,11 @@ extern int CD_nopen;
 static int cached_dir_num_ = 0; // index of the currently cached directory
 static int cached_nopen_ = -1;  // CD_nopen value when the cache was last filled
 static CdlFILE file_[CdlMAXFILE];      // store cached file entries
-static CdlDIR dire_[CdlMAXDIR];        // store cached directory entries
-static unsigned char load_buf_[0x800]; // CD sector buffer
+PSYZ_ESP_XRAM static CdlDIR dire_[CdlMAXDIR];        // store cached directory entries
+PSYZ_ESP_XRAM static unsigned char load_buf_[0x800]; // CD sector buffer
 
-int CD_cachefile(int);
-int CD_newmedia(void);
+s32 CD_cachefile(s32);
+s32 CD_newmedia(void);
 int CD_searchdir(int parentNum, char* name);
 static int _cmp(const char* str1, const char* str2);
 int cd_read(int n_sectors, int sector_no, unsigned char* ptr);

@@ -195,7 +195,7 @@ s32 SpuSetAnyVoice(s32 on_off, u32 bits, s32 addr1, s32 addr2);
 void _SpuCallback(void (*cb)());
 void _SpuInit(int bHot);
 int _spu_init(int bHot);
-int _SpuIsInAllocateArea_(unsigned);
+s32 _SpuIsInAllocateArea_(u32);
 void _spu_FiDMA(void);
 unsigned _spu_Fw(unsigned char* addr, unsigned size);
 unsigned _spu_Fr(unsigned char* addr, unsigned size);

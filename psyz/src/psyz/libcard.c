@@ -2,6 +2,8 @@
 #include <libapi.h>
 #include <psyz/log.h>
 #include <sys/stat.h>
+#include <stdio.h>
+#include <string.h>
 
 // 1:valid, 0:invalid
 static inline int validate_chan(long chan) {
@@ -35,56 +37,33 @@ long _card_auto(long val) {
 
 long _card_info(long chan) {
     if (!validate_chan(chan)) {
-        // TODO: unset SwCARD/EvSpIOE
-        // TODO: unset SwCARD/EvSpTIMOUT
-        // TODO: unset SwCARD/EvSpNEW
-        // TODO: set SwCARD/EvSpERROR
         return 0;
     }
-    // TODO: set SwCARD/EvSpIOE
-    // TODO: unset SwCARD/EvSpTIMOUT
-    // TODO: unset SwCARD/EvSpNEW
-    // TODO: unset SwCARD/EvSpERROR
-    NOT_IMPLEMENTED;
+    // file-backed card is always present and ready
     return 1;
 }
 
 long _card_load(long chan) {
     if (!validate_chan(chan)) {
-        // TODO: unset SwCARD/EvSpIOE
-        // TODO: unset SwCARD/EvSpTIMOUT
-        // TODO: unset SwCARD/EvSpNEW
-        // TODO: set SwCARD/EvSpERROR
         return 0;
     }
-    // TODO: set SwCARD/EvSpIOE
-    // TODO: unset SwCARD/EvSpTIMOUT
-    // TODO: unset SwCARD/EvSpNEW
-    // TODO: unset SwCARD/EvSpERROR
-    NOT_IMPLEMENTED;
     return 1;
 }
 
-void _new_card(void) { NOT_IMPLEMENTED; }
+void _new_card(void) {}
 
 long _card_status(long drv) {
-    NOT_IMPLEMENTED;
-    return 0;
+    (void)drv;
+    return 1; // synchronous file IO: never busy
 }
 
-void InitCARD2(long val) { NOT_IMPLEMENTED; }
+void InitCARD2(long val) { (void)val; }
 
-long StartCARD2(void) {
-    NOT_IMPLEMENTED;
-    return 0;
-}
+long StartCARD2(void) { return 0; }
 
-long StopCARD2(void) {
-    NOT_IMPLEMENTED;
-    return 0;
-}
+long StopCARD2(void) { return 0; }
 
-void _ExitCard(void) { NOT_IMPLEMENTED; }
+void _ExitCard(void) {}
 
 static void _bzero(unsigned char* p, int n) { memset(p, 0, n); }
 
@@ -137,12 +116,46 @@ long _card_sector_write(long chan, long block, unsigned char* buf) {
     return 0;
 }
 
+// File-backed memcard image: one 128KB file per channel, PSX sector
+// geometry (128-byte frames). Created on demand; short reads zero-fill.
+#define CARD_SECTOR 128
+#define CARD_SECTORS 1024
+
+static FILE* card_file(long chan, int for_write) {
+    char path[32];
+    snprintf(path, sizeof(path), "card%ld.mcd", (long)((chan >> 4) & 1));
+    FILE* f = fopen(path, "r+b");
+    if (f == NULL && for_write) {
+        f = fopen(path, "w+b");
+    }
+    return f;
+}
+
 long _card_write(long chan, long block, unsigned char* buf) {
-    NOT_IMPLEMENTED;
-    return 0;
+    if (!validate_chan(chan) || block < 0 || block >= CARD_SECTORS) {
+        return 0;
+    }
+    FILE* f = card_file(chan, 1);
+    if (f == NULL) {
+        return 0;
+    }
+    fseek(f, block * CARD_SECTOR, SEEK_SET);
+    size_t n = fwrite(buf, 1, CARD_SECTOR, f);
+    fclose(f);
+    return n == CARD_SECTOR ? 1 : 0;
 }
 
 long _card_read(long chan, long block, unsigned char* buf) {
-    NOT_IMPLEMENTED;
-    return 0;
+    if (!validate_chan(chan) || block < 0 || block >= CARD_SECTORS) {
+        return 0;
+    }
+    memset(buf, 0, CARD_SECTOR);
+    FILE* f = card_file(chan, 0);
+    if (f == NULL) {
+        return 1; // no card image yet: reads as blank card
+    }
+    fseek(f, block * CARD_SECTOR, SEEK_SET);
+    fread(buf, 1, CARD_SECTOR, f);
+    fclose(f);
+    return 1;
 }

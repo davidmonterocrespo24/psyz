@@ -33,10 +33,18 @@ typedef unsigned long u_long;
 
 typedef int8_t s8;
 typedef int16_t s16;
+#ifdef ESP_PLATFORM
+// xtensa newlib defines int32_t as long; the game's own types.h says
+// signed/unsigned int, and both headers meet in most translation units.
+// Same width, different C identity - match the game.
+typedef signed int s32;
+typedef unsigned int u32;
+#else
 typedef int32_t s32;
+typedef uint32_t u32;
+#endif
 typedef uint8_t u8;
 typedef uint16_t u16;
-typedef uint32_t u32;
 typedef int8_t byte;
 
 #ifndef NULL

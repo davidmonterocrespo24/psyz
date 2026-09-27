@@ -146,8 +146,11 @@ extern int (*GPU_printf)(); /* printf() object */
 #define _get_mode(dfe, dtd, tpage)                                             \
     ((0xe1000000) | ((dtd) ? 0x0200 : 0) | ((dfe) ? 0x0400 : 0) |              \
      ((tpage) & 0x9ff))
+/* word [2], not [1]: with the 8-byte tag+len header, [1] IS the len field --
+ * the packed-layout index left here overwrote the length with the E1 command
+ * word and every DR_TPAGE was dropped as a corrupt packet */
 #define setDrawTPage(p, dfe, dtd, tpage)                                       \
-    setlen(p, 1), ((u_long*)(p))[1] = _get_mode(dfe, dtd, tpage)
+    setlen(p, 1), ((u_long*)(p))[2] = _get_mode(dfe, dtd, tpage)
 
 #define setPolyF3(p) setlen(p, 4), setcode(p, 0x20)
 #define setPolyFT3(p) setlen(p, 7), setcode(p, 0x24)

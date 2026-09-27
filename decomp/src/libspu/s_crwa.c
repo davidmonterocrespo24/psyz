@@ -1,7 +1,7 @@
 #include "libspu_private.h"
 
 void WaitEvent(s32);
-s32 _SpuIsInAllocateArea_(u32);
+extern s32 _SpuIsInAllocateArea_(u32 addr);
 extern s32 _spu_zerobuf[];
 
 long SpuClearReverbWorkArea(long rev_mode) {

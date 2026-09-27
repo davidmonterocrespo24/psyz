@@ -1,4 +1,10 @@
 #include <psyz.h>
+#ifdef ESP_PLATFORM
+#include "esp_attr.h"
+#define PSYZ_ESP_XRAM EXT_RAM_BSS_ATTR
+#else
+#define PSYZ_ESP_XRAM
+#endif
 #include <psyz/log.h>
 #include <assert.h>
 #include <string.h>
@@ -108,7 +114,7 @@ typedef struct {
 } VoiceState;
 
 // Full SPU state
-static struct {
+PSYZ_ESP_XRAM static struct {
     u8 ram[PSYZ_SPU_RAM_SIZE];
 
     // Transfer address (byte address into SPU RAM)
@@ -146,7 +152,10 @@ static void spu_reset(void) {
 }
 
 static void spu_reset_hot(void) {
-    u8 saved_ram[PSYZ_SPU_RAM_SIZE];
+    /* 512KB on the stack is instantly fatal on an embedded task (ESP32-S3
+       stacks are tens of KB), and needlessly deep on desktop threads too.
+       Static: this path is not reentrant - it swaps SPU RAM around a reset. */
+    PSYZ_ESP_XRAM static u8 saved_ram[PSYZ_SPU_RAM_SIZE];
     memcpy(saved_ram, spu.ram, PSYZ_SPU_RAM_SIZE);
     spu_reset();
     memcpy(spu.ram, saved_ram, PSYZ_SPU_RAM_SIZE);
@@ -579,12 +588,24 @@ static void spu_tick(short* out) {
     }
 }
 
+#ifdef ESP_PLATFORM
+// On PSX the RCnt handlers were IRQs on the ONE cpu; on the ESP32 the audio
+// pull runs on core 1 and calling the handlers from there races the game
+// (VSyncHandler/seq tickers touch GPU queues and prim chains). Samples are
+// accumulated here and ticked from the game thread (Psyz_VideoVSync).
+volatile int psyz_pending_rcnt;
+#endif
+
 void Psyz_SpuPullSamples(short* out, int num_frames) {
     if (!spu.initialized) {
         memset(out, 0, num_frames * 2 * sizeof(short));
         return;
     }
+#ifdef ESP_PLATFORM
+    psyz_pending_rcnt += num_frames;
+#else
     Psyz_RcntAdd(num_frames);
+#endif
     for (int i = 0; i < num_frames; i++) {
         spu_tick(&out[i * 2]);
     }

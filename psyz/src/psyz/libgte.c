@@ -52,6 +52,8 @@ static short DQA;          // cop2 27 depth queing parameter A (coeff)
 static int DQB;            // cop2 28 depth queing parameter B (offset, s32)
 static short ZSF3;         // cop2 29 average Z scale factor
 static short ZSF4;         // cop2 30 average Z scale factor
+static int LZCS;           // cop1 30 leading-zero count source
+static int LZCR;           // cop1 31 leading-zero count result
 static unsigned int FLAG;  // cop2 31
 
 static unsigned int pack_xy(short x, short y);
@@ -1344,19 +1346,83 @@ long RotAverageNclip4(
     return MAC0;
 }
 
+/* Normalise to 4096 = 1.0, returning the SQUARE of the input length, which is
+ * what PSY-Q's VectorNormal family does.
+ *
+ * These three were stubs returning 0 and leaving the output untouched. That is
+ * not a harmless gap: DG_LookAt builds the camera basis with them
+ * (source/libdg/display.c:274-275), so the view matrix's right and forward
+ * rows kept whatever magnitude the raw eye-to-target difference had instead of
+ * unit length, and DG_SetMainLightDir (libdg/light.c:75) read an output that
+ * was never written.
+ *
+ * A 64-bit root is required rather than psyz's SquareRoot0: that takes a long,
+ * and three squared 16-bit components reach ~3.2e9, past what a signed 32-bit
+ * value holds -- the overflow would come back negative.
+ *
+ * Alias-safe on purpose: display.c:274 and takabe/dymc_flr.c:102 both pass the
+ * same pointer as source and destination, so the inputs are read into locals
+ * before anything is written back. */
+static unsigned long long psyz_isqrt64(unsigned long long n) {
+    unsigned long long root = 0;
+    unsigned long long bit = 1ULL << 62;
+
+    while (bit > n) {
+        bit >>= 2;
+    }
+    while (bit) {
+        if (n >= root + bit) {
+            n -= root + bit;
+            root = (root >> 1) + bit;
+        } else {
+            root >>= 1;
+        }
+        bit >>= 2;
+    }
+    return root;
+}
+
+static long psyz_normalise(long long x, long long y, long long z, long long* ox,
+                           long long* oy, long long* oz) {
+    long long sq = x * x + y * y + z * z;
+    long long len = (long long)psyz_isqrt64((unsigned long long)sq);
+
+    if (len == 0) {
+        *ox = *oy = *oz = 0;
+        return 0;
+    }
+    *ox = (x << 12) / len;
+    *oy = (y << 12) / len;
+    *oz = (z << 12) / len;
+    return (long)sq;
+}
+
 long VectorNormal(VECTOR* v0, VECTOR* v1) {
-    NOT_IMPLEMENTED;
-    return 0;
+    long long nx, ny, nz;
+    long sq = psyz_normalise(v0->vx, v0->vy, v0->vz, &nx, &ny, &nz);
+    v1->vx = (long)nx;
+    v1->vy = (long)ny;
+    v1->vz = (long)nz;
+    return sq;
 }
 
 long VectorNormalS(VECTOR* v0, SVECTOR* v1) {
-    NOT_IMPLEMENTED;
-    return 0;
+    long long nx, ny, nz;
+    long sq = psyz_normalise(v0->vx, v0->vy, v0->vz, &nx, &ny, &nz);
+    /* the result is bounded by +/-4096, so a short never clips */
+    v1->vx = (short)nx;
+    v1->vy = (short)ny;
+    v1->vz = (short)nz;
+    return sq;
 }
 
 long VectorNormalSS(SVECTOR* v0, SVECTOR* v1) {
-    NOT_IMPLEMENTED;
-    return 0;
+    long long nx, ny, nz;
+    long sq = psyz_normalise(v0->vx, v0->vy, v0->vz, &nx, &ny, &nz);
+    v1->vx = (short)nx;
+    v1->vy = (short)ny;
+    v1->vz = (short)nz;
+    return sq;
 }
 
 MATRIX* TransposeMatrix(MATRIX* m0, MATRIX* m1) {
@@ -1815,4 +1881,249 @@ void Psyz_GteCommand(unsigned int cmd) {
         WARNF("unhandled GTE op:%02X", op);
         break;
     }
+}
+
+/* ---------------------------------------------------------------------------
+ * PSY-Q inline GTE macros used by Metal Gear Solid but not previously exposed.
+ *
+ * Each one is transcribed from the MIPS COP2 assembly in the game's own
+ * inline_n.h, which is the authoritative specification: the register numbers
+ * below are exactly the ones that assembly loads and stores. Operations that
+ * take a 25-bit command word are handed straight to the existing
+ * implementations, the same way Psyz_GteRtpt already does.
+ * ------------------------------------------------------------------------- */
+
+/* --- operations (raw cop2 command words, taken from the game's asm) ------- */
+void Psyz_GteRtir(void) { MVMVA(0x0049e012); }
+void Psyz_GteRt(void) { MVMVA(0x00480012); }
+void Psyz_GteSqr0(void) { SQR(0x00a00428); }
+void Psyz_GteIntpl(void) { INTPL(0x00980011); }
+void Psyz_GteNcs(void) { NCS(0x00c8041e); }
+void Psyz_GteNctB(void) { NCT(0x00d80420); }
+void Psyz_GteRtptB(void) { RTPT(0x00280030); }
+
+/* --- loads --------------------------------------------------------------- */
+/* IR1..IR3 from three halfwords; ldsv loads them unsigned (lhu), ldopv2SV
+ * signed (lh) -- the only difference between the two. */
+void Psyz_GteLdsv(const void* p) {
+    const unsigned short* s = (const unsigned short*)p;
+    IR1 = (short)s[0];
+    IR2 = (short)s[1];
+    IR3 = (short)s[2];
+}
+void Psyz_GteLdopv2SV(const void* p) {
+    const short* s = (const short*)p;
+    IR1 = s[0];
+    IR2 = s[1];
+    IR3 = s[2];
+}
+/* IR1..IR3 from three full words (lwc2 truncates into the 16-bit registers) */
+void Psyz_GteLdlvl(const void* p) {
+    const int* w = (const int*)p;
+    IR1 = (short)w[0];
+    IR2 = (short)w[1];
+    IR3 = (short)w[2];
+}
+void Psyz_GteLddp(long v) { IR0 = (short)v; }
+void Psyz_GteLdlzc(long v) {
+    unsigned int u = (unsigned int)v;
+    int n = 1;
+    unsigned int sign = u & 0x80000000u;
+    LZCS = (int)v;
+    /* count leading zeros for a positive value, leading ones for a negative
+     * one -- the PSX result is always in 1..32 */
+    while (n < 32 && ((u << n) & 0x80000000u) == sign) {
+        n++;
+    }
+    LZCR = n;
+}
+/* VXY0 is assembled from the halfwords at +0 and +4, VZ0 from the word at +8 */
+void Psyz_GteLdlv0(const void* p) {
+    const short* s = (const short*)p;
+    V0.vx = s[0];
+    V0.vy = s[2];
+    V0.vz = (short)((const int*)p)[2];
+}
+void Psyz_GteLdsxy3(unsigned int xy0, unsigned int xy1, unsigned int xy2) {
+    SX0 = (short)(xy0 & 0xFFFF), SY0 = (short)(xy0 >> 16);
+    SX1 = (short)(xy1 & 0xFFFF), SY1 = (short)(xy1 >> 16);
+    SX2 = (short)(xy2 & 0xFFFF), SY2 = (short)(xy2 >> 16);
+}
+/* far colour (cop2 control 21..23) from three halfwords */
+void Psyz_GteLdIntpolSv0(const void* p) {
+    const short* s = (const short*)p;
+    L2.t[0] = s[0];
+    L2.t[1] = s[1];
+    L2.t[2] = s[2];
+}
+
+/* --- stores -------------------------------------------------------------- */
+void Psyz_GteStsv(void* p) {
+    short* s = (short*)p;
+    s[0] = IR1;
+    s[1] = IR2;
+    s[2] = IR3;
+}
+void Psyz_GteStsz(unsigned int* p) { *p = SZ3; }
+void Psyz_GteStsz3(unsigned int* p0, unsigned int* p1, unsigned int* p2) {
+    *p0 = SZ1;
+    *p1 = SZ2;
+    *p2 = SZ3;
+}
+void Psyz_GteStsz3c(unsigned int* p) {
+    p[0] = SZ1;
+    p[1] = SZ2;
+    p[2] = SZ3;
+}
+void Psyz_GteStsxy0(unsigned int* p) { *p = pack_xy(SX0, SY0); }
+void Psyz_GteStsxy1(unsigned int* p) { *p = pack_xy(SX1, SY1); }
+void Psyz_GteStsxy2(unsigned int* p) { *p = pack_xy(SX2, SY2); }
+void Psyz_GteStsxy01(unsigned int* p0, unsigned int* p1) {
+    *p0 = pack_xy(SX0, SY0);
+    *p1 = pack_xy(SX1, SY1);
+}
+void Psyz_GteStsxy3c(unsigned int* p) {
+    p[0] = pack_xy(SX0, SY0);
+    p[1] = pack_xy(SX1, SY1);
+    p[2] = pack_xy(SX2, SY2);
+}
+/* MAC1..MAC3 -- "lvnl" is the long vector, not the saturated IR copies */
+void Psyz_GteStlvnl(int* p) {
+    p[0] = MAC1;
+    p[1] = MAC2;
+    p[2] = MAC3;
+}
+void Psyz_GteStlvnl0(int* p) { *p = MAC1; }
+void Psyz_GteStlvnl1(int* p) { *p = MAC2; }
+void Psyz_GteStlvnl2(int* p) { *p = MAC3; }
+void Psyz_GteStlzc(int* p) { *p = LZCR; }
+void Psyz_GteStrgb3(unsigned int* p0, unsigned int* p1, unsigned int* p2) {
+    *p0 = RGB0;
+    *p1 = RGB1;
+    *p2 = RGB2;
+}
+
+/* --- control registers --------------------------------------------------- */
+/* cop2 control 0..7 is exactly the packed MATRIX image the game expects */
+void Psyz_GteReadRotMatrix(MATRIX* m) { *m = M; }
+/* cop2 control 8..12: the light matrix 3x3 only, no translation */
+void Psyz_GteSetLightMatrix(const MATRIX* m) {
+    int i, j;
+    for (i = 0; i < 3; i++) {
+        for (j = 0; j < 3; j++) {
+            L1.m[i][j] = m->m[i][j];
+        }
+    }
+}
+
+/* --- MGS's inline_x.h: direct loads of the V0..V2 vertex registers -------- */
+void Psyz_GteReadOpz(int* out) { *out = MAC0; }
+void Psyz_GteLdVXY0(unsigned int xy) {
+    V0.vx = (short)(xy & 0xFFFF), V0.vy = (short)(xy >> 16);
+}
+void Psyz_GteLdVXY1(unsigned int xy) {
+    V1.vx = (short)(xy & 0xFFFF), V1.vy = (short)(xy >> 16);
+}
+void Psyz_GteLdVXY2(unsigned int xy) {
+    V2.vx = (short)(xy & 0xFFFF), V2.vy = (short)(xy >> 16);
+}
+void Psyz_GteLdVZ0(int z) { V0.vz = (short)z; }
+void Psyz_GteLdVZ1(int z) { V1.vz = (short)z; }
+void Psyz_GteLdVZ2(int z) { V2.vz = (short)z; }
+
+/* --- matrix helpers and per-vector rotates the PSY-Q inline set exposed ---- */
+SVECTOR* ApplyMatrixSV(MATRIX* m, SVECTOR* v0, SVECTOR* v1) {
+    long x = v0->vx, y = v0->vy, z = v0->vz;
+    v1->vx = (short)((m->m[0][0] * x + m->m[0][1] * y + m->m[0][2] * z) >> 12);
+    v1->vy = (short)((m->m[1][0] * x + m->m[1][1] * y + m->m[1][2] * z) >> 12);
+    v1->vz = (short)((m->m[2][0] * x + m->m[2][1] * y + m->m[2][2] * z) >> 12);
+    return v1;
+}
+VECTOR* ApplyRotMatrixLV(VECTOR* v0, VECTOR* v1) {
+    long x = v0->vx, y = v0->vy, z = v0->vz;
+    v1->vx = (M.m[0][0] * x + M.m[0][1] * y + M.m[0][2] * z) >> 12;
+    v1->vy = (M.m[1][0] * x + M.m[1][1] * y + M.m[1][2] * z) >> 12;
+    v1->vz = (M.m[2][0] * x + M.m[2][1] * y + M.m[2][2] * z) >> 12;
+    return v1;
+}
+/* Rotate one of the three loaded vertices: MVMVA with v selecting V0/V1/V2.
+ *
+ * These three were transcribed from the wrong ROW of the game's own table.
+ * MGS spells out every variant it uses in source/include/inline_n.h, and the
+ * plain forms differ from the +TR and +BK forms only in the cv field:
+ *
+ *     gte_rtv0_b   0x00486012      gte_rtv0tr_b 0x00480012   <- was here
+ *     gte_rtv1_b   0x0048e012      gte_rtv1bk_b 0x0048a012   <- was here
+ *     gte_rtv2_b   0x00496012      gte_rtv2tr_b 0x00490012   <- was here
+ *
+ * So every "rotate this vector" silently became "rotate it and add the
+ * translation vector still sitting in the GTE" -- a stale offset of hundreds
+ * to thousands of world units added to results that were supposed to be pure
+ * directions. Psyz_GteRt above keeps 0x00480012 on purpose: gte_rt_b really
+ * is that word. */
+void Psyz_GteRtv0(void) { MVMVA(0x00486012); }
+void Psyz_GteRtv1(void) { MVMVA(0x0048e012); }
+void Psyz_GteRtv2(void) { MVMVA(0x00496012); }
+
+/* --- the last few PSY-Q inline forms MGS reaches for ---------------------- */
+void Psyz_GteNccs(void) { NCCS(0x00c8041b); }
+/* Light-matrix forms, from the same table:
+ *     gte_ll_b     0x004a6412      gte_llv0_b   0x004a6012
+ * Ll had 0x0098012 -- seven hex digits, not even a well-formed command word --
+ * and Llv0 had rtv0's, so lighting was being computed with the rotation
+ * matrix instead of the light matrix. */
+void Psyz_GteLl(void) { MVMVA(0x004a6412); }
+void Psyz_GteLlv0(void) { MVMVA(0x004a6012); }
+void Psyz_GteIntplB(void) { INTPL(0x00980011); }
+/* far-colour direction: the three FC control registers as full words */
+void Psyz_GteLdfcdir(const void* p) {
+    const int* w = (const int*)p;
+    L2.t[0] = w[0];
+    L2.t[1] = w[1];
+    L2.t[2] = w[2];
+}
+/* three-scalar spelling of the far-colour direction load */
+void Psyz_GteLdfcdir3(long r, long g, long b) {
+    L2.t[0] = (int)r;
+    L2.t[1] = (int)g;
+    L2.t[2] = (int)b;
+}
+
+/* --- the last inline forms, defined per-file by MGS's game code ----------- */
+/* far colour, x and z only (control 21 and 23) */
+void Psyz_GteLdIntpolSv0Xz(const void* p) {
+    const short* s = (const short*)p;
+    L2.t[0] = s[0];
+    L2.t[2] = s[2];
+}
+/* IR1 and IR3 from halfwords at +0 and +4 */
+void Psyz_GteLdIntpolSv1Xz(const void* p) {
+    const unsigned short* s = (const unsigned short*)p;
+    IR1 = (short)s[0];
+    IR3 = (short)s[2];
+}
+/* VXY0 from a single packed word */
+void Psyz_GteLdv0h(const void* p) {
+    unsigned int xy = *(const unsigned int*)p;
+    V0.vx = (short)(xy & 0xFFFF);
+    V0.vy = (short)(xy >> 16);
+}
+int Psyz_GtePopColor(void) { return IR1; }
+void Psyz_GteReadNormal(int* x, int* y, int* z) {
+    *x = IR1;
+    *y = IR2;
+    *z = IR3;
+}
+/* IR1, IR2 as halfwords */
+void Psyz_GteStbh(void* p) {
+    short* s = (short*)p;
+    s[0] = IR1;
+    s[1] = IR2;
+}
+/* IR1 at +0, zero at +2, IR3 at +4 */
+void Psyz_GteStsvXz(void* p) {
+    short* s = (short*)p;
+    s[0] = IR1;
+    s[1] = 0;
+    s[2] = IR3;
 }

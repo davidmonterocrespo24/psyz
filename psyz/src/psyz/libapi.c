@@ -1,4 +1,10 @@
 #include <psyz.h>
+#ifdef ESP_PLATFORM
+#include "esp_attr.h"
+#define PSYZ_ESP_XRAM EXT_RAM_BSS_ATTR
+#else
+#define PSYZ_ESP_XRAM
+#endif
 #include <psyz/log.h>
 #include <kernel.h>
 #include <libetc.h>
@@ -49,14 +55,23 @@ void Psyz_SetVSyncCb(PsyzVSyncCb cb) { g_PsyzVsyncCb = cb; }
 extern void (*g_VsyncCallback)();
 int Psyz_VideoVSync(int mode);
 int VSync(int mode) {
-    // TODO the implementation is most likely incorrect
-    int elapsed = (unsigned short)Psyz_VideoVSync(mode);
+    int raw = Psyz_VideoVSync(mode);
     if (mode < 0) {
-        // TODO return vsync, not elapsed
-        return elapsed;
+        /* Total vertical blanks since boot. The PSX returns Vcount, a full
+         * 32-bit counter -- roughly 800 days before it wraps.
+         *
+         * This used to truncate to 16 bits, which put a hard 65536-field limit
+         * on the machine: MGS's scheduler stores mts_time = VSync(-1) and
+         * parks a task with target = last + count, so at 17.6 minutes the
+         * clock rolled back to zero while a task sat waiting for target 65537.
+         * "mts_time < target" then stayed true forever and the game froze with
+         * every counter repeating and one task never waking. Truncation is
+         * right for mode 1 -- that one really is a 16-bit hblank delta the
+         * hardware reports masked -- but not for the field count. */
+        return raw;
     }
     if (mode == 1) {
-        return elapsed;
+        return (unsigned short)raw;
     }
     ReadPadsOnVsync(); // this is done on vsync by the BIOS
     if (g_PsyzVsyncCb) {
@@ -65,7 +80,7 @@ int VSync(int mode) {
     if (g_VsyncCallback) {
         g_VsyncCallback();
     }
-    return elapsed;
+    return raw;
 }
 
 PsyzControllerKind Psyz_PadsSetKind(
@@ -159,7 +174,7 @@ long ReadInitPadFlag(void) {
 void ChangeClearPAD(long a) { NOT_IMPLEMENTED; }
 
 static unsigned long event_first_empty = 0;
-static struct EvCB events[0x100] = {0};
+PSYZ_ESP_XRAM static struct EvCB events[0x100];
 static long GetFirstFreeEvent() {
     // event_first_empty brings the function to O(1) in an optimistic scenario,
     // but it does not guarantee it always points to an empty event
@@ -282,8 +297,18 @@ long TestEvent(unsigned long event) {
     return events[event].status;
 }
 
-void PS1_EnterCriticalSection(void) { NOT_IMPLEMENTED; }
-void PS1_ExitCriticalSection(void) { NOT_IMPLEMENTED; }
+/* The PSX masked interrupts here, and cooperative schedulers built on the
+ * kernel (MGS's mts) guard ALL their bookkeeping with this. Hosts that model
+ * the vblank as a preempting task must check this depth and defer their tick
+ * while it is nonzero, or they preempt half-written scheduler state. */
+volatile int psyz_critical_depth;
+
+/* NOT a counter: the PSX syscall set the interrupt mask absolutely, and code
+ * exploits that -- mts tasks begin with a bare ExitCriticalSection to enable
+ * interrupts they never disabled. Counting drifts upward and masks the tick
+ * forever. */
+void PS1_EnterCriticalSection(void) { psyz_critical_depth = 1; }
+void PS1_ExitCriticalSection(void) { psyz_critical_depth = 0; }
 
 void DeliverEvent(unsigned ev1, unsigned ev2) { NOT_IMPLEMENTED; }
 

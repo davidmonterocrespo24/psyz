@@ -1,6 +1,7 @@
 #include "libspu_private.h"
 
-void SpuNGetVoiceAttr(s32 vNum, SpuVoiceAttr* attr);
+/* declared by <libspu.h>; the local copy used s32 where the header uses int,
+ * which are distinct types on a target where int32_t is long */
 void SpuGetVoiceAttr(SpuVoiceAttr* attr) {
     s32 voice;
     s32 i;

@@ -1,4 +1,10 @@
 #include <common.h>
+#ifdef ESP_PLATFORM
+#include "esp_attr.h"
+#define PSYZ_ESP_XRAM EXT_RAM_BSS_ATTR
+#else
+#define PSYZ_ESP_XRAM
+#endif
 #include <string.h>
 #include <libgte.h>
 #include <libgpu.h>
@@ -16,7 +22,7 @@ struct Font {
 static struct Font Font[FNT_MAX_ID] = {0};
 static int n_fonts_open = 0;
 static int dump_id = 0;
-static u8 font_data[] = {
+static const u8 font_data[] = {
     0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -235,7 +241,7 @@ static u8 font_data[] = {
 static s32 i_str = 0;
 static const char* D_800B7CBC[] = {"0123456789ABCDEF"};
 static char str[0x400];
-static SPRT_8 sprt[0x400];
+PSYZ_ESP_XRAM static SPRT_8 sprt[0x400];
 static u16 tpage;
 static u16 _padding;
 static u16 clut;

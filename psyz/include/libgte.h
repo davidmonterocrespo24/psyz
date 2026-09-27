@@ -380,7 +380,9 @@ MATRIX* TransposeMatrix(MATRIX* m0, MATRIX* m1);
  * @param m Pointer to output matrix
  * @return Pointer to matrix
  */
-MATRIX* CompMatrix(SVECTOR* rot, VECTOR* trans, MATRIX* m);
+/* PSY-Q's CompMatrix multiplies three matrices; the previous declaration
+ * here had a different signature and no implementation anywhere. */
+MATRIX* CompMatrix(MATRIX* m0, MATRIX* m1, MATRIX* m2);
 
 /**
  * @brief Set geometry offset
@@ -1920,34 +1922,192 @@ void RotMeshH(short* Yheight, DVECTOR* Vo, u_short* sz, u_short* flag,
 
 #else // __psyz defined
 #define gte_SetGeomScreen SetGeomScreen
-#define gte_SetRotMatrix SetRotMatrix
+#define gte_SetRotMatrix(x) SetRotMatrix((MATRIX*)(x))
 #define gte_SetTransMatrix SetTransMatrix
 #define gte_SetColorMatrix SetColorMatrix
 #define gte_SetTransVector(r0) SetTransVector(r0)
 #define gte_rtps() Psyz_GteRtps()
 #define gte_stsxy(x) Psyz_GteStsxy((unsigned int*)(x))
 #define gte_stszotz(x) Psyz_GteStszotz((unsigned int*)(x))
-#define gte_ldv3(x, y, z) Psyz_GteLdv3(x, y, z)
+#define gte_ldv3(x, y, z) Psyz_GteLdv3((SVECTOR*)(x), (SVECTOR*)(y), (SVECTOR*)(z))
 #define gte_stsxy3(x, y, z) Psyz_GteStsxy3((unsigned int*)(x), (unsigned int*)(y), (unsigned int*)(z))
 #define gte_rtpt() Psyz_GteRtpt()
 #define gte_nclip() Psyz_GteNclip()
 #define gte_stopz(x) Psyz_GteStopz((int*)(x))
-#define gte_ldv0(x) Psyz_GteLdv0(x)
-#define gte_ldv01c(x) Psyz_GteLdv01c(x)
-#define gte_ldv3c(x) Psyz_GteLdv3c(x)
+#define gte_ldv0(x) Psyz_GteLdv0((SVECTOR*)(x))
+#define gte_ldv01c(x) Psyz_GteLdv01c((SVECTOR*)(x))
+#define gte_ldv3c(x) Psyz_GteLdv3c((SVECTOR*)(x))
 #define gte_stsxy01c(x) Psyz_GteStsxy01c((unsigned int*)(x))
 #define gte_stsxy3_gt3(x) Psyz_GteStsxy3Gt3((POLY_GT3*)(x))
 #define gte_avsz3() Psyz_GteAvsz3()
 #define gte_dpcs() Psyz_GteDpcs()
 #define gte_lcir() Psyz_GteLcir()
-#define gte_ldclmv(x) Psyz_GteLdClmv(x)
-#define gte_ldrgb(x) Psyz_GteLdRgb(x)
+#define gte_ldclmv(x) Psyz_GteLdClmv((void*)(x))
+#define gte_ldrgb(x) Psyz_GteLdRgb((CVECTOR*)(x))
 #define gte_ldtr(x, y, z) Psyz_GteLdTr(x, y, z)
 #define gte_ldtx(x) Psyz_GteLdTx(x)
 #define gte_ldty(x) Psyz_GteLdTy(x)
 #define gte_ldtz(x) Psyz_GteLdTz(x)
-#define gte_stclmv(x) Psyz_GteStClmv(x)
-#define gte_strgb(x) Psyz_GteStRgb(x)
+#define gte_stclmv(x) Psyz_GteStClmv((void*)(x))
+#define gte_strgb(x) Psyz_GteStRgb((CVECTOR*)(x))
+
+/* These are defined in libgte.c and already macro-aliased below, but were never
+ * declared here; without prototypes every user compiles them implicitly. */
+void Psyz_GteLdClmv(void* p);
+void Psyz_GteLdRgb(CVECTOR* v);
+void Psyz_GteLdv0(SVECTOR* v);
+void Psyz_GteLdv01c(SVECTOR* v);
+void Psyz_GteLdv3(SVECTOR* v0, SVECTOR* v1, SVECTOR* v2);
+void Psyz_GteLdv3c(SVECTOR* v);
+void Psyz_GteNclip(void);
+void Psyz_GteRtps(void);
+void Psyz_GteRtpt(void);
+void Psyz_GteStClmv(void* p);
+void Psyz_GteStRgb(CVECTOR* v);
+void Psyz_GteStopz(int* out);
+void Psyz_GteStsxy(unsigned int* out);
+void Psyz_GteStsxy3(unsigned int* out0, unsigned int* out1, unsigned int* out2);
+void Psyz_GteStsxy3Gt3(void* polyGte);
+void Psyz_GteStsxy01c(unsigned int* out);
+void Psyz_GteAvsz3(void);
+void Psyz_GteDpcs(void);
+void Psyz_GteLcir(void);
+void Psyz_GteLdTr(long tx, long ty, long tz);
+void Psyz_GteLdTx(long v);
+void Psyz_GteLdTy(long v);
+void Psyz_GteLdTz(long v);
+
+/* --- macros used by Metal Gear Solid, implemented in libgte.c ------------- */
+void Psyz_GteRtir(void);
+void Psyz_GteRt(void);
+void Psyz_GteSqr0(void);
+void Psyz_GteIntpl(void);
+void Psyz_GteNcs(void);
+void Psyz_GteNctB(void);
+void Psyz_GteRtptB(void);
+void Psyz_GteLdsv(const void* p);
+void Psyz_GteLdopv2SV(const void* p);
+void Psyz_GteLdlvl(const void* p);
+void Psyz_GteLddp(long v);
+void Psyz_GteLdlzc(long v);
+void Psyz_GteLdlv0(const void* p);
+void Psyz_GteLdsxy3(unsigned int xy0, unsigned int xy1, unsigned int xy2);
+void Psyz_GteLdIntpolSv0(const void* p);
+void Psyz_GteStsv(void* p);
+void Psyz_GteStsz(unsigned int* p);
+void Psyz_GteStsz3(unsigned int* p0, unsigned int* p1, unsigned int* p2);
+void Psyz_GteStsz3c(unsigned int* p);
+void Psyz_GteStsxy0(unsigned int* p);
+void Psyz_GteStsxy1(unsigned int* p);
+void Psyz_GteStsxy2(unsigned int* p);
+void Psyz_GteStsxy01(unsigned int* p0, unsigned int* p1);
+void Psyz_GteStsxy3c(unsigned int* p);
+void Psyz_GteStlvnl(int* p);
+void Psyz_GteStlvnl0(int* p);
+void Psyz_GteStlvnl1(int* p);
+void Psyz_GteStlvnl2(int* p);
+void Psyz_GteStlzc(int* p);
+void Psyz_GteStrgb3(unsigned int* p0, unsigned int* p1, unsigned int* p2);
+void Psyz_GteReadRotMatrix(MATRIX* m);
+void Psyz_GteSetLightMatrix(const MATRIX* m);
+
+#define gte_rtir() Psyz_GteRtir()
+#define gte_rt() Psyz_GteRt()
+#define gte_sqr0() Psyz_GteSqr0()
+#define gte_intpl() Psyz_GteIntpl()
+#define gte_ncs() Psyz_GteNcs()
+#define gte_nct_b() Psyz_GteNctB()
+#define gte_rtpt_b() Psyz_GteRtptB()
+#define gte_ldsv(x) Psyz_GteLdsv((const void*)(x))
+#define gte_ldopv2SV(x) Psyz_GteLdopv2SV((const void*)(x))
+#define gte_ldlvl(x) Psyz_GteLdlvl((const void*)(x))
+#define gte_lddp(x) Psyz_GteLddp((long)(x))
+#define gte_ldlzc(x) Psyz_GteLdlzc((long)(x))
+#define gte_ldlv0(x) Psyz_GteLdlv0((const void*)(x))
+#define gte_ldsxy3(a, b, c) Psyz_GteLdsxy3((unsigned int)(a), (unsigned int)(b), (unsigned int)(c))
+#define gte_ld_intpol_sv0(x) Psyz_GteLdIntpolSv0((const void*)(x))
+#define gte_stsv(x) Psyz_GteStsv((void*)(x))
+#define gte_stsz(x) Psyz_GteStsz((unsigned int*)(x))
+#define gte_stsz3(a, b, c) Psyz_GteStsz3((unsigned int*)(a), (unsigned int*)(b), (unsigned int*)(c))
+#define gte_stsz3c(x) Psyz_GteStsz3c((unsigned int*)(x))
+#define gte_stsxy0(x) Psyz_GteStsxy0((unsigned int*)(x))
+#define gte_stsxy1(x) Psyz_GteStsxy1((unsigned int*)(x))
+#define gte_stsxy2(x) Psyz_GteStsxy2((unsigned int*)(x))
+#define gte_stsxy01(a, b) Psyz_GteStsxy01((unsigned int*)(a), (unsigned int*)(b))
+#define gte_stsxy3c(x) Psyz_GteStsxy3c((unsigned int*)(x))
+#define gte_stlvnl(x) Psyz_GteStlvnl((int*)(x))
+#define gte_stlvnl0(x) Psyz_GteStlvnl0((int*)(x))
+#define gte_stlvnl1(x) Psyz_GteStlvnl1((int*)(x))
+#define gte_stlvnl2(x) Psyz_GteStlvnl2((int*)(x))
+#define gte_stlzc(x) Psyz_GteStlzc((int*)(x))
+#define gte_strgb3(a, b, c) Psyz_GteStrgb3((unsigned int*)(a), (unsigned int*)(b), (unsigned int*)(c))
+#define gte_ReadRotMatrix(x) Psyz_GteReadRotMatrix((MATRIX*)(x))
+
+void Psyz_GteLdIntpolSv0Xz(const void* p);
+void Psyz_GteLdIntpolSv1Xz(const void* p);
+void Psyz_GteLdv0h(const void* p);
+int  Psyz_GtePopColor(void);
+void Psyz_GteReadNormal(int* x, int* y, int* z);
+void Psyz_GteStbh(void* p);
+void Psyz_GteStsvXz(void* p);
+#define gte_ld_intpol_sv0_xz(x) Psyz_GteLdIntpolSv0Xz((const void*)(x))
+#define gte_ld_intpol_sv1_xz(x) Psyz_GteLdIntpolSv1Xz((const void*)(x))
+#define gte_ldv0h(x) Psyz_GteLdv0h((const void*)(x))
+#define gte_pop_color(r) ((r) = Psyz_GtePopColor())
+#define gte_read_normal(x, y, z) Psyz_GteReadNormal((int*)&(x), (int*)&(y), (int*)&(z))
+#define gte_stbh(x) Psyz_GteStbh((void*)(x))
+#define gte_stsv_xz(x) Psyz_GteStsvXz((void*)(x))
+void Psyz_GteNccs(void);
+void Psyz_GteLl(void);
+void Psyz_GteLlv0(void);
+void Psyz_GteIntplB(void);
+void Psyz_GteLdfcdir(const void* p);
+#define gte_nop() ((void)0)
+#define gte_nccs() Psyz_GteNccs()
+#define gte_ll() Psyz_GteLl()
+#define gte_llv0() Psyz_GteLlv0()
+#define gte_intpl_b() Psyz_GteIntplB()
+#define gte_ldfcdir(x) Psyz_GteLdfcdir((const void*)(x))
+void Psyz_GteLdfcdir3(long r, long g, long b);
+#define gte_ldfcdir3(r, g, b) Psyz_GteLdfcdir3((long)(r), (long)(g), (long)(b))
+#define gte_ApplyMatrixSV(m, v0, v1) ApplyMatrixSV((MATRIX*)(m), (SVECTOR*)(v0), (SVECTOR*)(v1))
+VECTOR* ApplyMatrixLV(MATRIX* m, VECTOR* v0, VECTOR* v1);
+SVECTOR* ApplyMatrixSV(MATRIX* m, SVECTOR* v0, SVECTOR* v1);
+VECTOR* ApplyRotMatrixLV(VECTOR* v0, VECTOR* v1);
+void Psyz_GteRtv0(void);
+void Psyz_GteRtv1(void);
+void Psyz_GteRtv2(void);
+#define gte_rtv0() Psyz_GteRtv0()
+#define gte_rtv1() Psyz_GteRtv1()
+#define gte_rtv2() Psyz_GteRtv2()
+#define gte_rtv0_b() Psyz_GteRtv0()
+#define gte_rtv1_b() Psyz_GteRtv1()
+#define gte_rtv2_b() Psyz_GteRtv2()
+
+/* MGS's inline_x.h -- direct vertex-register loads */
+void Psyz_GteReadOpz(int* out);
+void Psyz_GteLdVXY0(unsigned int xy);
+void Psyz_GteLdVXY1(unsigned int xy);
+void Psyz_GteLdVXY2(unsigned int xy);
+void Psyz_GteLdVZ0(int z);
+void Psyz_GteLdVZ1(int z);
+void Psyz_GteLdVZ2(int z);
+/* the MIPS original is an OUTPUT constraint -- "=r"(r0) -- so the alias must
+ * take the variable's ADDRESS; passing its (uninitialized) value as the
+ * pointer sent the store into address zero */
+#define gte_read_opz(x) Psyz_GteReadOpz((int*)&(x))
+#define gte_ldVXY0(x) Psyz_GteLdVXY0((unsigned int)(x))
+#define gte_ldVXY1(x) Psyz_GteLdVXY1((unsigned int)(x))
+#define gte_ldVXY2(x) Psyz_GteLdVXY2((unsigned int)(x))
+#define gte_ldVZ0(z) Psyz_GteLdVZ0((int)(z))
+#define gte_ldVZ1(z) Psyz_GteLdVZ1((int)(z))
+#define gte_ldVZ2(z) Psyz_GteLdVZ2((int)(z))
+#define gte_ldVXYZ0(x, z) (Psyz_GteLdVXY0((unsigned int)(x)), Psyz_GteLdVZ0((int)(z)))
+#define gte_ldVXYZ1(x, z) (Psyz_GteLdVXY1((unsigned int)(x)), Psyz_GteLdVZ1((int)(z)))
+#define gte_ldVXYZ2(x, z) (Psyz_GteLdVXY2((unsigned int)(x)), Psyz_GteLdVZ2((int)(z)))
+#define gte_SetLightMatrix(x) Psyz_GteSetLightMatrix((const MATRIX*)(x))
+#define gte_SetBackColor(r, g, b) SetBackColor((long)(r), (long)(g), (long)(b))
+#define gte_SetGeomOffset(x, y) SetGeomOffset((long)(x), (long)(y))
 #endif
 
 #endif

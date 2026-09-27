@@ -39,7 +39,16 @@ long SquareRoot0_impl(long a) {
         return 0;
     }
     if (a < 0) {
+        /* Callers pass a sum of squares, so negative means the caller's own
+         * arithmetic went wrong upstream -- there is no meaningful root to
+         * return. The code below would carry on regardless: a negative
+         * normalizes to an index outside the table and the wrap-around picks
+         * an arbitrary entry, handing back a large plausible-looking distance
+         * that then propagates into whatever the caller does with it. Zero is
+         * the honest answer and keeps the damage local to the frame that
+         * produced it. */
         WARNF("SquareRoot0(%d) negative value", (int)a);
+        return 0;
     }
 
     lzc = gte_leadingzerocount(a);

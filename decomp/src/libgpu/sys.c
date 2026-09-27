@@ -1,4 +1,10 @@
 #include <common.h>
+#ifdef ESP_PLATFORM
+#include "esp_attr.h"
+#define PSYZ_ESP_XRAM EXT_RAM_BSS_ATTR
+#else
+#define PSYZ_ESP_XRAM
+#endif
 #include <libetc.h>
 #include <libgte.h>
 #include <libgpu.h>
@@ -9,7 +15,7 @@ struct Gpu {
         int (*exec)(u_long p1, u_long p2), u_long p1, u_long p2);
     /* 0x08 */ int (*addque2)(
         int (*exec)(u_long p1, u_long p2), u_long p1, int len, u_long p2);
-    /* 0x0C */ int (*clr)(RECT* rect, unsigned int color);
+    /* 0x0C */ int (*clr)(RECT* rect, u32 color);
     /* 0x10 */ void (*ctl)(unsigned int);
     /* 0x14 */ int (*cwb)(u32* data, s32 n);
     /* 0x18 */ void (*cwc)(u_long* packets);
@@ -45,7 +51,7 @@ static int D_800B88D8[] = {0x15077350, 0x0040899C};
 static DR_ENV D_800E8640;
 static s32 __dummy[2];
 u_char ctlbuf[0x100];
-u_char _que[0x1800];
+PSYZ_ESP_XRAM u_char _que[0x1800];
 
 void SetDrawEnv2(DR_ENV* dr_env, DRAWENV* env);
 #ifndef __psyz
@@ -688,7 +694,7 @@ u_long _status(void) { return *GPU_STATUS; }
 
 int get_alarm(void);
 void set_alarm(void);
-int _otc(OT_TYPE* ot, int n) {
+int _otc(OT_TYPE* ot, s32 n) {
     *DPCR |= 0x08000000;
     *DMA6_CHCR = 0;
     *DMA6_MADR = ot - 1 + n;

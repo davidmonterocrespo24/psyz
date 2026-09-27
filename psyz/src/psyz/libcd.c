@@ -1,4 +1,10 @@
 #include <psyz.h>
+#ifdef ESP_PLATFORM
+#include "esp_attr.h"
+#define PSYZ_ESP_XRAM EXT_RAM_BSS_ATTR
+#else
+#define PSYZ_ESP_XRAM
+#endif
 #include <libetc.h>
 #include <libcd.h>
 #include <psyz/log.h>
@@ -47,7 +53,7 @@ typedef struct {
 } CdContext;
 
 // Global CUE data storage
-static TrackEntry g_tracks[MAX_TRACKS];
+PSYZ_ESP_XRAM static TrackEntry g_tracks[MAX_TRACKS];
 static int g_track_count = 0;
 static char g_cue_base_path[MAX_PATH_LEN];
 
@@ -377,7 +383,7 @@ void Psyz_CdSetReadCB(PsyzCdReadCB cb) { disk_read_cb = cb; }
 #define CD_BUF_FRAMES                                                          \
     (SECTOR_SIZE * BUFFER_SECTORS / (N_CHANNELS * SAMPLE_SIZE))
 static FILE* track_file;
-static s16 cd_buf[CD_BUF_FRAMES * N_CHANNELS];
+PSYZ_ESP_XRAM static s16 cd_buf[CD_BUF_FRAMES * N_CHANNELS];
 static size_t cd_buf_pos = 0;   // current read position (in frames)
 static size_t cd_buf_count = 0; // number of valid frames in buffer
 static int is_playing = 0; // pause or unpause seeking through the CD stream
@@ -431,7 +437,7 @@ end:
 #define XA_DECODED_MAX_FRAMES 4032            // 18 blocks * 4 sub * 28 samples
 #define XA_STEP_Q16 ((37800u << 16) / 44100u) // 56173
 
-static struct {
+PSYZ_ESP_XRAM static struct {
     short decoded[XA_DECODED_MAX_FRAMES * 2];
     int active;
     unsigned char filter_file;

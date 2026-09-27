@@ -50,7 +50,12 @@ void PadStop(void) { NOT_IMPLEMENTED; }
 void (*g_VsyncCallback)() = NULL;
 
 int VSyncCallback(void (*f)()) {
-    NOT_IMPLEMENTED;
+    /* The PSX raises a vblank interrupt 60 times a second and the BIOS calls
+     * this hook from it. Games build their whole frame pacing on it -- MGS's
+     * mts scheduler blocks in mts_wait_vbl() until this fires. Store it here;
+     * the platform layer is responsible for calling g_VsyncCallback at the
+     * field rate. */
+    g_VsyncCallback = f;
     return 0;
 }
 
@@ -120,18 +125,18 @@ void StartTAP(void) {
     StartPAD();
 }
 
-int PadGetState(int port) {
+__attribute__((weak)) int PadGetState(int port) {
     // from PSY-Q 4.2
     NOT_IMPLEMENTED;
     return 0;
 }
 
-void PadSetAct(int port, u_char* data, int len) {
+__attribute__((weak)) void PadSetAct(int port, u_char* data, int len) {
     // from PSY-Q 4.2
     NOT_IMPLEMENTED;
 }
 
-int PadSetActAlign(int port, char* data) {
+__attribute__((weak)) int PadSetActAlign(int port, char* data) {
     // from PSY-Q 4.2
     NOT_IMPLEMENTED;
     return 0;
@@ -142,7 +147,7 @@ void PadInitMtap(u_char* pad1, u_char* pad2) {
     NOT_IMPLEMENTED;
 }
 
-void PadStartCom(void) {
+__attribute__((weak)) void PadStartCom(void) {
     // from PSY-Q 4.2
     NOT_IMPLEMENTED;
 }

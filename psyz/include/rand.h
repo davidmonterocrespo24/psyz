@@ -21,6 +21,13 @@ int rand(void);
  *
  * @param seed Random number seed
  */
+#ifdef __psyz
+/* A hosted libc already declares srand(unsigned). On a target where u_long and
+ * unsigned are distinct types (Xtensa: u_long is long) the PSY-Q spelling
+ * conflicts, so defer to the platform's declaration there. */
+#include <stdlib.h>
+#else
 void srand(u_long seed);
+#endif
 
 #endif
